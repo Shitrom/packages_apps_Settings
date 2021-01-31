@@ -29,7 +29,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.ActionBar;
-import android.app.Activity;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -41,6 +40,8 @@ import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.VectorDrawable;
+import android.media.MediaRoute2Info;
+import android.media.MediaRouter2Manager;
 import android.net.ConnectivityManager;
 import android.net.LinkAddress;
 import android.net.LinkProperties;
@@ -67,6 +68,7 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
+import org.robolectric.shadows.ShadowBinder;
 
 import java.net.InetAddress;
 import java.util.ArrayList;
@@ -280,5 +282,52 @@ public class UtilsTest {
                 new ScrollView(mContext));
 
         assertThat(actionBar.getElevation()).isEqualTo(0.f);
+    }
+
+    @Test
+    public void isSettingsIntelligence_IsSI_returnTrue() {
+        final String siPackageName = mContext.getString(
+                R.string.config_settingsintelligence_package_name);
+        ShadowBinder.setCallingUid(USER_ID);
+        when(mPackageManager.getPackagesForUid(USER_ID)).thenReturn(new String[]{siPackageName});
+
+        assertThat(Utils.isSettingsIntelligence(mContext)).isTrue();
+    }
+
+    @Test
+    public void isSettingsIntelligence_IsNotSI_returnFalse() {
+        ShadowBinder.setCallingUid(USER_ID);
+        when(mPackageManager.getPackagesForUid(USER_ID)).thenReturn(new String[]{PACKAGE_NAME});
+
+        assertThat(Utils.isSettingsIntelligence(mContext)).isFalse();
+    }
+
+    @Test
+    public void isMediaOutputDisabled_infosSizeEqual1_returnsTrue() {
+        final MediaRouter2Manager router2Manager = mock(MediaRouter2Manager.class);
+        final MediaRoute2Info info = mock(MediaRoute2Info.class);
+        final List<MediaRoute2Info> infos = new ArrayList<>();
+        infos.add(info);
+
+        when(router2Manager.getAvailableRoutes(anyString())).thenReturn(infos);
+        when(info.getType()).thenReturn(0);
+
+        assertThat(Utils.isMediaOutputDisabled(router2Manager, "test")).isTrue();
+    }
+
+    @Test
+    public void isMediaOutputDisabled_infosSizeOverThan1_returnsFalse() {
+        final MediaRouter2Manager router2Manager = mock(MediaRouter2Manager.class);
+        final MediaRoute2Info info = mock(MediaRoute2Info.class);
+        final MediaRoute2Info info2 = mock(MediaRoute2Info.class);
+        final List<MediaRoute2Info> infos = new ArrayList<>();
+        infos.add(info);
+        infos.add(info2);
+
+        when(router2Manager.getAvailableRoutes(anyString())).thenReturn(infos);
+        when(info.getType()).thenReturn(0);
+        when(info2.getType()).thenReturn(0);
+
+        assertThat(Utils.isMediaOutputDisabled(router2Manager, "test")).isFalse();
     }
 }

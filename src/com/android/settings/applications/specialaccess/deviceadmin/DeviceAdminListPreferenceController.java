@@ -43,16 +43,15 @@ import androidx.annotation.VisibleForTesting;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceGroup;
 import androidx.preference.PreferenceScreen;
-import androidx.preference.SwitchPreference;
 
-import com.android.settings.R;
 import com.android.settings.core.BasePreferenceController;
+import com.android.settings.overlay.FeatureFactory;
 import com.android.settings.widget.FilterTouchesSwitchPreference;
+import com.android.settingslib.core.instrumentation.MetricsFeatureProvider;
 import com.android.settingslib.core.lifecycle.LifecycleObserver;
 import com.android.settingslib.core.lifecycle.events.OnStart;
 import com.android.settingslib.core.lifecycle.events.OnStop;
 import com.android.settingslib.widget.FooterPreference;
-import com.android.settingslib.widget.FooterPreferenceMixinCompat;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -68,11 +67,13 @@ public class DeviceAdminListPreferenceController extends BasePreferenceControlle
 
     private static final IntentFilter FILTER = new IntentFilter();
     private static final String TAG = "DeviceAdminListPrefCtrl";
+    private static final String KEY_DEVICE_ADMIN_FOOTER = "device_admin_footer";
 
     private final DevicePolicyManager mDPM;
     private final UserManager mUm;
     private final PackageManager mPackageManager;
     private final IPackageManager mIPackageManager;
+    private final MetricsFeatureProvider mMetricsFeatureProvider;
     /**
      * Internal collection of device admin info objects for all profiles associated with the current
      * user.
@@ -92,7 +93,7 @@ public class DeviceAdminListPreferenceController extends BasePreferenceControlle
     };
 
     private PreferenceGroup mPreferenceGroup;
-    private FooterPreferenceMixinCompat mFooterPreferenceMixin;
+    private FooterPreference mFooterPreference;
 
     static {
         FILTER.addAction(ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
@@ -104,12 +105,7 @@ public class DeviceAdminListPreferenceController extends BasePreferenceControlle
         mUm = (UserManager) context.getSystemService(Context.USER_SERVICE);
         mPackageManager = mContext.getPackageManager();
         mIPackageManager = AppGlobals.getPackageManager();
-    }
-
-    public DeviceAdminListPreferenceController setFooterPreferenceMixin(
-            FooterPreferenceMixinCompat mixin) {
-        mFooterPreferenceMixin = mixin;
-        return this;
+        mMetricsFeatureProvider = FeatureFactory.getFactory(context).getMetricsFeatureProvider();
     }
 
     @Override
@@ -121,6 +117,7 @@ public class DeviceAdminListPreferenceController extends BasePreferenceControlle
     public void displayPreference(PreferenceScreen screen) {
         super.displayPreference(screen);
         mPreferenceGroup = screen.findPreference(getPreferenceKey());
+        mFooterPreference = mPreferenceGroup.findPreference(KEY_DEVICE_ADMIN_FOOTER);
     }
 
     @Override
@@ -168,10 +165,8 @@ public class DeviceAdminListPreferenceController extends BasePreferenceControlle
         if (mPreferenceGroup == null) {
             return;
         }
-        if (mFooterPreferenceMixin != null) {
-            final FooterPreference footer = mFooterPreferenceMixin.createFooterPreference();
-            footer.setTitle(R.string.no_device_admins);
-            footer.setVisible(mAdmins.isEmpty());
+        if (mFooterPreference != null) {
+            mFooterPreference.setVisible(mAdmins.isEmpty());
         }
         final Map<String, FilterTouchesSwitchPreference> preferenceCache = new ArrayMap<>();
         final Context prefContext = mPreferenceGroup.getContext();
@@ -206,6 +201,7 @@ public class DeviceAdminListPreferenceController extends BasePreferenceControlle
         pref.setSummary(item.getDescription());
         pref.setEnabled(item.isEnabled());
         pref.setOnPreferenceClickListener(preference -> {
+            mMetricsFeatureProvider.logClickedPreference(preference, getMetricsCategory());
             final UserHandle user = item.getUser();
             mContext.startActivityAsUser(item.getLaunchIntent(mContext), user);
             return true;

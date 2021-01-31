@@ -74,7 +74,7 @@ public class LockscreenDashboardFragmentTest {
         List<String> keys = XmlTestUtils.getKeysFromPreferenceXml(RuntimeEnvironment.application,
                 mTestFragment.getPreferenceScreenResId());
 
-        assertThat(keys).containsAllOf(LockscreenDashboardFragment.KEY_LOCK_SCREEN_NOTIFICATON,
+        assertThat(keys).containsAtLeast(LockscreenDashboardFragment.KEY_LOCK_SCREEN_NOTIFICATON,
                 LockscreenDashboardFragment.KEY_LOCK_SCREEN_NOTIFICATON_WORK_PROFILE,
                 LockscreenDashboardFragment.KEY_LOCK_SCREEN_NOTIFICATON_WORK_PROFILE_HEADER);
     }
@@ -123,13 +123,13 @@ public class LockscreenDashboardFragmentTest {
     }
 
     @Test
-    public void isPageSearchable_notLocked_shouldNotBeSearchable() {
+    public void isPageSearchable_notLocked_shouldBeSearchable() {
         when(mLockPatternUtils.isSecure(anyInt())).thenReturn(false);
         when(mLockPatternUtils.isLockScreenDisabled(anyInt())).thenReturn(true);
 
         assertThat(LockscreenDashboardFragment.SEARCH_INDEX_DATA_PROVIDER
                 .getNonIndexableKeys(mContext))
-                .contains("security_lockscreen_settings_screen");
+                .doesNotContain("security_lockscreen_settings_screen");
     }
 
     public static class TestFragment extends LockscreenDashboardFragment {

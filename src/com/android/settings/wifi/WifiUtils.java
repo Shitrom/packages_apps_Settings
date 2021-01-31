@@ -23,10 +23,14 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.net.NetworkCapabilities;
 import android.net.wifi.ScanResult;
+import android.net.wifi.SoftApConfiguration;
 import android.net.wifi.WifiConfiguration;
+import android.os.UserHandle;
+import android.os.UserManager;
 import android.provider.Settings;
 import android.text.TextUtils;
 
+import com.android.settings.Utils;
 import com.android.settingslib.wifi.AccessPoint;
 
 import java.nio.charset.StandardCharsets;
@@ -35,8 +39,6 @@ public class WifiUtils {
 
     private static final int SSID_ASCII_MIN_LENGTH = 1;
     private static final int SSID_ASCII_MAX_LENGTH = 32;
-    private static final int PASSWORD_MIN_LENGTH = 8;
-    private static final int PASSWORD_MAX_LENGTH = 63;
 
 
     public static boolean isSSIDTooLong(String ssid) {
@@ -53,13 +55,17 @@ public class WifiUtils {
         return ssid.length() < SSID_ASCII_MIN_LENGTH;
     }
 
-    public static boolean isHotspotPasswordValid(String password) {
-        if (TextUtils.isEmpty(password)) {
+    /**
+     * Check if the WPA2-PSK hotspot password is valid.
+     */
+    public static boolean isHotspotWpa2PasswordValid(String password) {
+        final SoftApConfiguration.Builder configBuilder = new SoftApConfiguration.Builder();
+        try {
+            configBuilder.setPassphrase(password, SoftApConfiguration.SECURITY_TYPE_WPA2_PSK);
+        } catch (IllegalArgumentException e) {
             return false;
         }
-
-        final int length = password.length();
-        return length >= PASSWORD_MIN_LENGTH && length <= PASSWORD_MAX_LENGTH;
+        return true;
     }
 
     /**
@@ -77,6 +83,7 @@ public class WifiUtils {
         final DevicePolicyManager dpm =
                 (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
         final PackageManager pm = context.getPackageManager();
+        final UserManager um = (UserManager) context.getSystemService(Context.USER_SERVICE);
 
         // Check if device has DPM capability. If it has and dpm is still null, then we
         // treat this case with suspicion and bail out.
@@ -95,6 +102,18 @@ public class WifiUtils {
                     isConfigEligibleForLockdown = deviceOwnerUid == config.creatorUid;
                 } catch (PackageManager.NameNotFoundException e) {
                     // don't care
+                }
+            } else if (dpm.isOrganizationOwnedDeviceWithManagedProfile()) {
+                int profileOwnerUserId = Utils.getManagedProfileId(um, UserHandle.myUserId());
+                final ComponentName profileOwner = dpm.getProfileOwnerAsUser(profileOwnerUserId);
+                if (profileOwner != null) {
+                    try {
+                        final int profileOwnerUid = pm.getPackageUidAsUser(
+                                profileOwner.getPackageName(), profileOwnerUserId);
+                        isConfigEligibleForLockdown = profileOwnerUid == config.creatorUid;
+                    } catch (PackageManager.NameNotFoundException e) {
+                        // don't care
+                    }
                 }
             }
         }
@@ -157,13 +176,11 @@ public class WifiUtils {
 
         switch (security) {
             case AccessPoint.SECURITY_NONE:
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+                config.setSecurityParams(WifiConfiguration.SECURITY_TYPE_OPEN);
                 break;
 
             case AccessPoint.SECURITY_WEP:
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
-                config.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN);
-                config.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.SHARED);
+                config.setSecurityParams(WifiConfiguration.SECURITY_TYPE_WEP);
                 if (!TextUtils.isEmpty(password)) {
                     int length = password.length();
                     // WEP-40, WEP-104, and 256-bit WEP (WEP-232?)
@@ -177,7 +194,7 @@ public class WifiUtils {
                 break;
 
             case AccessPoint.SECURITY_PSK:
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
+                config.setSecurityParams(WifiConfiguration.SECURITY_TYPE_PSK);
                 if (!TextUtils.isEmpty(password)) {
                     if (password.matches("[0-9A-Fa-f]{64}")) {
                         config.preSharedKey = password;
@@ -189,16 +206,11 @@ public class WifiUtils {
 
             case AccessPoint.SECURITY_EAP:
             case AccessPoint.SECURITY_EAP_SUITE_B:
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_EAP);
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.IEEE8021X);
                 if (security == AccessPoint.SECURITY_EAP_SUITE_B) {
-                    config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.SUITE_B_192);
-                    config.requirePMF = true;
-                    config.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.GCMP_256);
-                    config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.GCMP_256);
-                    config.allowedGroupManagementCiphers.set(WifiConfiguration.GroupMgmtCipher
-                            .BIP_GMAC_256);
                     // allowedSuiteBCiphers will be set according to certificate type
+                    config.setSecurityParams(WifiConfiguration.SECURITY_TYPE_EAP_SUITE_B);
+                } else {
+                    config.setSecurityParams(WifiConfiguration.SECURITY_TYPE_EAP);
                 }
 
                 if (!TextUtils.isEmpty(password)) {
@@ -206,16 +218,14 @@ public class WifiUtils {
                 }
                 break;
             case AccessPoint.SECURITY_SAE:
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.SAE);
-                config.requirePMF = true;
+                config.setSecurityParams(WifiConfiguration.SECURITY_TYPE_SAE);
                 if (!TextUtils.isEmpty(password)) {
                     config.preSharedKey = '"' + password + '"';
                 }
                 break;
 
             case AccessPoint.SECURITY_OWE:
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.OWE);
-                config.requirePMF = true;
+                config.setSecurityParams(WifiConfiguration.SECURITY_TYPE_OWE);
                 break;
 
             default:
@@ -268,12 +278,11 @@ public class WifiUtils {
         if (accessPoint.isOsuProvider()) {
             return CONNECT_TYPE_OSU_PROVISION;
         } else if ((accessPoint.getSecurity() == AccessPoint.SECURITY_NONE) ||
-                (accessPoint.getSecurity() == AccessPoint.SECURITY_OWE) ||
-                (accessPoint.getSecurity() == AccessPoint.SECURITY_OWE_TRANSITION)) {
+                (accessPoint.getSecurity() == AccessPoint.SECURITY_OWE)) {
             return CONNECT_TYPE_OPEN_NETWORK;
         } else if (accessPoint.isSaved() && config != null
                 && config.getNetworkSelectionStatus() != null
-                && config.getNetworkSelectionStatus().getHasEverConnected()) {
+                && config.getNetworkSelectionStatus().hasEverConnected()) {
             return CONNECT_TYPE_SAVED_NETWORK;
         } else if (accessPoint.isPasspoint()) {
             // Access point provided by an installed Passpoint provider, connect using

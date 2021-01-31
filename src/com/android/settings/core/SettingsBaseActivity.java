@@ -63,7 +63,7 @@ public class SettingsBaseActivity extends FragmentActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (isLockTaskModePinned() && !isSettingsRunOnTop() && !isLaunchableInTaskModePinned()) {
+        if (isLockTaskModePinned() && !isSettingsRunOnTop()) {
             Log.w(TAG, "Devices lock task mode pinned.");
             finish();
         }
@@ -111,7 +111,7 @@ public class SettingsBaseActivity extends FragmentActivity {
         filter.addDataScheme(DATA_SCHEME_PKG);
         registerReceiver(mPackageReceiver, filter);
 
-        new CategoriesUpdateTask().execute();
+        updateCategories();
     }
 
     @Override
@@ -163,15 +163,15 @@ public class SettingsBaseActivity extends FragmentActivity {
 
     private boolean isLockTaskModePinned() {
         final ActivityManager activityManager =
-            getApplicationContext().getSystemService(ActivityManager.class);
+                getApplicationContext().getSystemService(ActivityManager.class);
         return activityManager.getLockTaskModeState() == ActivityManager.LOCK_TASK_MODE_PINNED;
     }
 
     private boolean isSettingsRunOnTop() {
         final ActivityManager activityManager =
-            getApplicationContext().getSystemService(ActivityManager.class);
+                getApplicationContext().getSystemService(ActivityManager.class);
         final String taskPkgName = activityManager.getRunningTasks(1 /* maxNum */)
-            .get(0 /* index */).baseActivity.getPackageName();
+                .get(0 /* index */).baseActivity.getPackageName();
         return TextUtils.equals(getPackageName(), taskPkgName);
     }
 
@@ -232,7 +232,7 @@ public class SettingsBaseActivity extends FragmentActivity {
     private class PackageReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
-            new CategoriesUpdateTask().execute();
+            updateCategories();
         }
     }
 }

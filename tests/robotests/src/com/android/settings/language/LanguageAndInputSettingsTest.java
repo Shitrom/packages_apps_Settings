@@ -28,23 +28,17 @@ import static org.mockito.Mockito.when;
 
 import android.app.Activity;
 import android.app.admin.DevicePolicyManager;
-import android.content.ComponentName;
-import android.content.ContentResolver;
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.hardware.input.InputManager;
 import android.os.UserManager;
-import android.provider.Settings;
 import android.view.autofill.AutofillManager;
-import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.view.textservice.TextServicesManager;
 
 import androidx.lifecycle.LifecycleObserver;
 
 import com.android.settings.R;
-import com.android.settings.dashboard.SummaryLoader;
 import com.android.settings.testutils.XmlTestUtils;
 import com.android.settingslib.core.AbstractPreferenceController;
 import com.android.settingslib.core.lifecycle.Lifecycle;
@@ -67,15 +61,11 @@ public class LanguageAndInputSettingsTest {
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
     private Activity mActivity;
     @Mock
-    private PackageManager mPackageManager;
-    @Mock
     private InputManager mIm;
     @Mock
     private InputMethodManager mImm;
     @Mock
     private DevicePolicyManager mDpm;
-    @Mock
-    private InputMethodManager mInputMethodManager;
     @Mock
     private AutofillManager mAutofillManager;
     private TestFragment mFragment;
@@ -124,31 +114,6 @@ public class LanguageAndInputSettingsTest {
     }
 
     @Test
-    public void testSummary_shouldSetToCurrentImeName() {
-        final Activity activity = mock(Activity.class);
-        final SummaryLoader loader = mock(SummaryLoader.class);
-        final ComponentName componentName = new ComponentName("pkg", "cls");
-        final ContentResolver cr = activity.getContentResolver();
-        Settings.Secure.putString(cr, Settings.Secure.DEFAULT_INPUT_METHOD,
-                componentName.flattenToString());
-        when(activity.getSystemService(Context.INPUT_METHOD_SERVICE))
-                .thenReturn(mInputMethodManager);
-        when(activity.getPackageManager()).thenReturn(mPackageManager);
-        final List<InputMethodInfo> imis = new ArrayList<>();
-        imis.add(mock(InputMethodInfo.class));
-        when(imis.get(0).getPackageName()).thenReturn(componentName.getPackageName());
-        when(mInputMethodManager.getInputMethodList()).thenReturn(imis);
-
-        SummaryLoader.SummaryProvider provider = LanguageAndInputSettings.SUMMARY_PROVIDER_FACTORY
-                .createSummaryProvider(activity, loader);
-
-        provider.setListening(true);
-
-        verify(imis.get(0)).loadLabel(mPackageManager);
-        verify(loader).setSummary(provider, null);
-    }
-
-    @Test
     public void testNonIndexableKeys_existInXmlLayout() {
         final Context context = spy(RuntimeEnvironment.application);
         final Resources res = spy(RuntimeEnvironment.application.getResources());
@@ -168,7 +133,7 @@ public class LanguageAndInputSettingsTest {
 
         final List<String> keys = XmlTestUtils.getKeysFromPreferenceXml(context, xmlId);
 
-        assertThat(keys).containsAllIn(niks);
+        assertThat(keys).containsAtLeastElementsIn(niks);
     }
 
     @Test
@@ -186,7 +151,7 @@ public class LanguageAndInputSettingsTest {
             preferenceKeys.add(controller.getPreferenceKey());
         }
 
-        assertThat(preferenceScreenKeys).containsAllIn(preferenceKeys);
+        assertThat(preferenceScreenKeys).containsAtLeastElementsIn(preferenceKeys);
     }
 
     /**

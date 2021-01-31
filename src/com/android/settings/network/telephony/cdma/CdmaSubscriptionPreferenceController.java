@@ -19,13 +19,13 @@ package com.android.settings.network.telephony.cdma;
 import android.content.Context;
 import android.os.SystemProperties;
 import android.provider.Settings;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 
 import androidx.annotation.VisibleForTesting;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 
-import com.android.internal.telephony.Phone;
 import com.android.settings.network.telephony.MobileNetworkUtils;
 
 /**
@@ -56,8 +56,9 @@ public class CdmaSubscriptionPreferenceController extends CdmaBasePreferenceCont
         final ListPreference listPreference = (ListPreference) preference;
         listPreference.setVisible(getAvailabilityStatus() == AVAILABLE);
         final int mode = Settings.Global.getInt(mContext.getContentResolver(),
-                Settings.Global.CDMA_SUBSCRIPTION_MODE, Phone.PREFERRED_CDMA_SUBSCRIPTION);
-        if (mode != Phone.CDMA_SUBSCRIPTION_UNKNOWN) {
+                Settings.Global.CDMA_SUBSCRIPTION_MODE,
+                TelephonyManager.CDMA_SUBSCRIPTION_RUIM_SIM);
+        if (mode != TelephonyManager.CDMA_SUBSCRIPTION_UNKNOWN) {
             listPreference.setValue(Integer.toString(mode));
         }
     }
@@ -66,13 +67,14 @@ public class CdmaSubscriptionPreferenceController extends CdmaBasePreferenceCont
     public boolean onPreferenceChange(Preference preference, Object object) {
         final int newMode = Integer.parseInt((String) object);
         //TODO(b/117611981): only set it in one place
-        if (mTelephonyManager.setCdmaSubscriptionMode(newMode)) {
+        try {
+            mTelephonyManager.setCdmaSubscriptionMode(newMode);
             Settings.Global.putInt(mContext.getContentResolver(),
                     Settings.Global.CDMA_SUBSCRIPTION_MODE, newMode);
             return true;
+        } catch (IllegalStateException e) {
+            return false;
         }
-
-        return false;
     }
 
     @VisibleForTesting

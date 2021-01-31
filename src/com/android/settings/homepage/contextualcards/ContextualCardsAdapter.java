@@ -16,7 +16,10 @@
 
 package com.android.settings.homepage.contextualcards;
 
+import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
+
 import android.content.Context;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -105,13 +108,11 @@ public class ContextualCardsAdapter extends RecyclerView.Adapter<RecyclerView.Vi
                 @Override
                 public int getSpanSize(int position) {
                     final int viewType = mContextualCards.get(position).getViewType();
-                    switch (viewType) {
-                        case ConditionContextualCardRenderer.VIEW_TYPE_HALF_WIDTH:
-                        case SliceContextualCardRenderer.VIEW_TYPE_HALF_WIDTH:
-                            return HALF_WIDTH;
-                        default:
-                            return FULL_WIDTH;
+                    if (viewType == ConditionContextualCardRenderer.VIEW_TYPE_HALF_WIDTH
+                            || viewType == SliceContextualCardRenderer.VIEW_TYPE_HALF_WIDTH) {
+                        return HALF_WIDTH;
                     }
+                    return FULL_WIDTH;
                 }
             });
         }
@@ -133,12 +134,25 @@ public class ContextualCardsAdapter extends RecyclerView.Adapter<RecyclerView.Vi
             diffResult.dispatchUpdatesTo(this);
         }
 
-        if (mRecyclerView != null && previouslyEmpty && !nowEmpty) {
+        if (mRecyclerView == null) {
+            return;
+        }
+
+        // When no card gets displayed either because a card's condition no longer meets
+        // or when it's dismissed, the height should be rearranged.
+        if (mContextualCards.isEmpty()) {
+            final ViewGroup.LayoutParams params = mRecyclerView.getLayoutParams();
+            if (params.height != WRAP_CONTENT) {
+                Log.d(TAG, "mContextualCards is empty. Set the RV to wrap_content");
+                params.height = WRAP_CONTENT;
+                mRecyclerView.setLayoutParams(params);
+            }
+        }
+
+        if (previouslyEmpty && !nowEmpty) {
             // Adding items to empty list, should animate.
             mRecyclerView.scheduleLayoutAnimation();
         }
-
-        //TODO(b/119465242): flickering conditional cards after collapsing/expanding
     }
 
     @Override

@@ -25,7 +25,6 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.UserHandle;
 import android.preference.SeekBarVolumizer;
-import android.provider.SearchIndexableResource;
 import android.text.TextUtils;
 
 import androidx.annotation.VisibleForTesting;
@@ -39,11 +38,11 @@ import com.android.settings.dashboard.DashboardFragment;
 import com.android.settings.search.BaseSearchIndexProvider;
 import com.android.settings.sound.HandsFreeProfileOutputPreferenceController;
 import com.android.settings.widget.PreferenceCategoryController;
-import com.android.settings.widget.UpdatableListPreferenceDialogFragment;
 import com.android.settingslib.core.AbstractPreferenceController;
 import com.android.settingslib.core.instrumentation.Instrumentable;
 import com.android.settingslib.core.lifecycle.Lifecycle;
 import com.android.settingslib.search.SearchIndexable;
+import com.android.settingslib.widget.UpdatableListPreferenceDialogFragment;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -77,6 +76,7 @@ public class SoundSettings extends DashboardFragment implements OnActivityResult
     private RingtonePreference mRequestPreference;
     private UpdatableListPreferenceDialogFragment mDialogFragment;
     private String mHfpOutputControllerKey;
+    private String mVibrationPreferencesKey = "vibration_preference_screen";
 
     @Override
     public int getMetricsCategory() {
@@ -113,6 +113,7 @@ public class SoundSettings extends DashboardFragment implements OnActivityResult
     @Override
     public boolean onPreferenceTreeClick(Preference preference) {
         if (preference instanceof RingtonePreference) {
+            writePreferenceClickMetric(preference);
             mRequestPreference = (RingtonePreference) preference;
             mRequestPreference.onPrepareRingtonePickerIntent(mRequestPreference.getIntent());
             getActivity().startActivityForResultAsUser(
@@ -127,6 +128,10 @@ public class SoundSettings extends DashboardFragment implements OnActivityResult
 
     @Override
     public void onDisplayPreferenceDialog(Preference preference) {
+        if (TextUtils.equals(mVibrationPreferencesKey, preference.getKey())) {
+            super.onDisplayPreferenceDialog(preference);
+            return;
+        }
         final int metricsCategory;
         if (mHfpOutputControllerKey.equals(preference.getKey())) {
             metricsCategory = SettingsEnums.DIALOG_SWITCH_HFP_DEVICES;
@@ -180,7 +185,6 @@ public class SoundSettings extends DashboardFragment implements OnActivityResult
         volumeControllers.add(use(RingVolumePreferenceController.class));
         volumeControllers.add(use(NotificationVolumePreferenceController.class));
         volumeControllers.add(use(CallVolumePreferenceController.class));
-        volumeControllers.add(use(RemoteVolumePreferenceController.class));
 
         use(HandsFreeProfileOutputPreferenceController.class).setCallback(listPreference ->
                 onPreferenceDataChanged(listPreference));
@@ -286,14 +290,7 @@ public class SoundSettings extends DashboardFragment implements OnActivityResult
     // === Indexing ===
 
     public static final BaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
-            new BaseSearchIndexProvider() {
-
-                public List<SearchIndexableResource> getXmlResourcesToIndex(
-                        Context context, boolean enabled) {
-                    final SearchIndexableResource sir = new SearchIndexableResource(context);
-                    sir.xmlResId = R.xml.sound_settings;
-                    return Arrays.asList(sir);
-                }
+            new BaseSearchIndexProvider(R.xml.sound_settings) {
 
                 @Override
                 public List<AbstractPreferenceController> createPreferenceControllers(

@@ -65,7 +65,7 @@ public class MobileDataPreferenceController extends TelephonyTogglePreferenceCon
     public int getAvailabilityStatus(int subId) {
         return subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID
                 ? AVAILABLE
-                : DISABLED_DEPENDENT_SETTING;
+                : AVAILABLE_UNSEARCHABLE;
     }
 
     @Override
@@ -128,6 +128,13 @@ public class MobileDataPreferenceController extends TelephonyTogglePreferenceCon
             preference.setEnabled(true);
             preference.setSummary(R.string.mobile_data_settings_summary);
         }
+
+        if (mSubId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            preference.setSelectable(false);
+            preference.setSummary(R.string.mobile_data_settings_summary_unavailable);
+        } else {
+            preference.setSelectable(true);
+        }
     }
 
     private boolean isOpportunistic() {
@@ -138,13 +145,14 @@ public class MobileDataPreferenceController extends TelephonyTogglePreferenceCon
     public void init(FragmentManager fragmentManager, int subId) {
         mFragmentManager = fragmentManager;
         mSubId = subId;
-        mTelephonyManager = TelephonyManager.from(mContext).createForSubscriptionId(mSubId);
+        mTelephonyManager = mContext.getSystemService(TelephonyManager.class)
+                .createForSubscriptionId(mSubId);
     }
 
     @VisibleForTesting
     boolean isDialogNeeded() {
         final boolean enableData = !isChecked();
-        final boolean isMultiSim = (mTelephonyManager.getSimCount() > 1);
+        final boolean isMultiSim = (mTelephonyManager.getActiveModemCount() > 1);
         final int defaultSubId = mSubscriptionManager.getDefaultDataSubscriptionId();
         final boolean needToDisableOthers = mSubscriptionManager
                 .isActiveSubscriptionId(defaultSubId) && defaultSubId != mSubId;

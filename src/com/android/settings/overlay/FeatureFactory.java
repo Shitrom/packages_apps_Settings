@@ -26,10 +26,12 @@ import com.android.settings.R;
 import com.android.settings.accounts.AccountFeatureProvider;
 import com.android.settings.applications.ApplicationFeatureProvider;
 import com.android.settings.aware.AwareFeatureProvider;
+import com.android.settings.biometrics.face.FaceFeatureProvider;
 import com.android.settings.bluetooth.BluetoothFeatureProvider;
 import com.android.settings.dashboard.DashboardFeatureProvider;
 import com.android.settings.dashboard.suggestions.SuggestionFeatureProvider;
 import com.android.settings.enterprise.EnterprisePrivacyFeatureProvider;
+import com.android.settings.fuelgauge.BatteryStatusFeatureProvider;
 import com.android.settings.fuelgauge.PowerUsageFeatureProvider;
 import com.android.settings.gestures.AssistGestureFeatureProvider;
 import com.android.settings.homepage.contextualcards.ContextualCardFeatureProvider;
@@ -102,6 +104,12 @@ public abstract class FeatureFactory {
 
     public abstract PowerUsageFeatureProvider getPowerUsageFeatureProvider(Context context);
 
+    /**
+     * Retrieve implementation for Battery Status feature.
+     */
+    public abstract BatteryStatusFeatureProvider getBatteryStatusFeatureProvider(
+            Context context);
+
     public abstract DashboardFeatureProvider getDashboardFeatureProvider(Context context);
 
     public abstract DockUpdaterFeatureProvider getDockUpdaterFeatureProvider();
@@ -132,6 +140,8 @@ public abstract class FeatureFactory {
     public abstract BluetoothFeatureProvider getBluetoothFeatureProvider(Context context);
 
     public abstract AwareFeatureProvider getAwareFeatureProvider();
+
+    public abstract FaceFeatureProvider getFaceFeatureProvider();
 
     public static final class FactoryNotFoundException extends RuntimeException {
         public FactoryNotFoundException(Throwable throwable) {

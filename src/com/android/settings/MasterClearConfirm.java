@@ -21,18 +21,26 @@ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
 
 import android.app.ActionBar;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.app.admin.DevicePolicyManager;
+import android.app.admin.FactoryResetProtectionPolicy;
 import android.app.settings.SettingsEnums;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.service.oemlock.OemLockManager;
 import android.service.persistentdata.PersistentDataBlockManager;
+import android.telephony.TelephonyManager;
+import android.telephony.UiccSlotInfo;
+import android.telephony.euicc.EuiccManager;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -49,7 +57,10 @@ import com.android.settingslib.RestrictedLockUtilsInternal;
 import com.google.android.setupcompat.template.FooterBarMixin;
 import com.google.android.setupcompat.template.FooterButton;
 import com.google.android.setupcompat.template.FooterButton.ButtonType;
+import com.google.android.setupcompat.util.WizardManagerHelper;
 import com.google.android.setupdesign.GlifLayout;
+
+import java.util.Arrays;
 
 /**
  * Confirm and execute a reset of the device to a clean "just out of the box"
@@ -80,16 +91,94 @@ public class MasterClearConfirm extends InstrumentedFragment {
                 return;
             }
 
+            // If the eSIM slot is in an error state, display a dialog to warn users that their eSIM
+            // profiles may not be fully deleted during FDR.
+            if (shouldShowEsimEraseFailureDialog()) {
+                Log.e(TAG, "eUICC card is in an error state. Display a dialog to warn the user.");
+                showEsimErrorDialog();
+                return;
+            }
+
+            performFactoryReset();
+        }
+
+        /**
+         * Returns true if the user choose to erase eSIM profile but the eUICC card is in an error
+         * state.
+         */
+        private boolean shouldShowEsimEraseFailureDialog() {
+            EuiccManager euiccManager = getActivity().getSystemService(EuiccManager.class);
+            TelephonyManager telephonyManager =
+                    getActivity().getSystemService(TelephonyManager.class);
+
+            if (euiccManager == null || !euiccManager.isEnabled()) {
+                Log.i(
+                        TAG,
+                        "eSIM manager is disabled. No need to check eSIM slot before FDR.");
+                return false;
+            }
+            if (!mEraseEsims) {
+                Log.i(
+                        TAG,
+                        "eSIM does not need to be reset. No need to check eSIM slot before FDR.");
+                return false;
+            }
+            UiccSlotInfo[] slotInfos = telephonyManager.getUiccSlotsInfo();
+            if (slotInfos == null) {
+                Log.i(TAG, "Unable to get UICC slots.");
+                return false;
+            }
+            // If getIsEuicc() returns false for an eSIM slot, it means the eSIM is in the error
+            // state.
+            return Arrays.stream(slotInfos).anyMatch(
+                    slot -> slot != null && !slot.isRemovable() && !slot.getIsEuicc());
+        }
+
+        private void showEsimErrorDialog() {
+            new AlertDialog.Builder(getActivity())
+                    .setTitle(R.string.fdr_esim_failure_title)
+                    .setMessage(R.string.fdr_esim_failure_text)
+                    .setNeutralButton(R.string.dlg_cancel,
+                            (DialogInterface.OnClickListener) (dialog, which) -> {
+                                dialog.dismiss();
+                            })
+                    .setNegativeButton(R.string.fdr_esim_failure_reboot_btn,
+                            (DialogInterface.OnClickListener) (dialog, which) -> {
+                                dialog.dismiss();
+                                PowerManager pm = (PowerManager) getActivity()
+                                        .getSystemService(Context.POWER_SERVICE);
+                                pm.reboot(null);
+                            })
+                    .setPositiveButton(R.string.lockpassword_continue_label,
+                            (DialogInterface.OnClickListener) (dialog, which) -> {
+                                dialog.dismiss();
+                                showContinueFdrDialog();
+                            })
+                    .show();
+        }
+
+        private void showContinueFdrDialog() {
+            new AlertDialog.Builder(getActivity())
+                    .setTitle(R.string.fdr_continue_title)
+                    .setMessage(R.string.fdr_continue_text)
+                    .setNegativeButton(R.string.dlg_cancel,
+                            (DialogInterface.OnClickListener) (dialog, which) -> {
+                                dialog.dismiss();
+                            })
+                    .setPositiveButton(R.string.fdr_continue_btn,
+                            (DialogInterface.OnClickListener) (dialog, which) -> {
+                                dialog.dismiss();
+                                performFactoryReset();
+                            })
+                    .show();
+        }
+
+        private void performFactoryReset() {
             final PersistentDataBlockManager pdbManager = (PersistentDataBlockManager)
                     getActivity().getSystemService(Context.PERSISTENT_DATA_BLOCK_SERVICE);
-            final OemLockManager oemLockManager = (OemLockManager)
-                    getActivity().getSystemService(Context.OEM_LOCK_SERVICE);
 
-            if (pdbManager != null && !oemLockManager.isOemUnlockAllowed() &&
-                    Utils.isDeviceProvisioned(getActivity())) {
-                // if OEM unlock is allowed, the persistent data block will be wiped during FR
-                // process. If disabled, it will be wiped here, unless the device is still being
-                // provisioned, in which case the persistent data block will be preserved.
+            if (shouldWipePersistentDataBlock(pdbManager)) {
+
                 new AsyncTask<Void, Void, Void>() {
                     int mOldOrientation;
                     ProgressDialog mProgressDialog;
@@ -138,6 +227,49 @@ public class MasterClearConfirm extends InstrumentedFragment {
             return progressDialog;
         }
     };
+
+    @VisibleForTesting
+    boolean shouldWipePersistentDataBlock(PersistentDataBlockManager pdbManager) {
+        if (pdbManager == null) {
+            return false;
+        }
+        // The persistent data block will persist if the device is still being provisioned.
+        if (isDeviceStillBeingProvisioned()) {
+            return false;
+        }
+        // If OEM unlock is allowed, the persistent data block will be wiped during FR
+        // process. If disabled, it will be wiped here instead.
+        if (isOemUnlockedAllowed()) {
+            return false;
+        }
+        final DevicePolicyManager dpm = (DevicePolicyManager) getActivity()
+                .getSystemService(Context.DEVICE_POLICY_SERVICE);
+        // Do not erase the factory reset protection data (from Settings) if factory reset
+        // protection policy is not supported on the device.
+        if (!dpm.isFactoryResetProtectionPolicySupported()) {
+            return false;
+        }
+        // Do not erase the factory reset protection data (from Settings) if the
+        // device is an organization-owned managed profile device and a factory
+        // reset protection policy has been set.
+        FactoryResetProtectionPolicy frpPolicy = dpm.getFactoryResetProtectionPolicy(null);
+        if (dpm.isOrganizationOwnedDeviceWithManagedProfile() && frpPolicy != null
+                && frpPolicy.isNotEmpty()) {
+            return false;
+        }
+        return true;
+    }
+
+    @VisibleForTesting
+    boolean isOemUnlockedAllowed() {
+        return ((OemLockManager) getActivity().getSystemService(
+                Context.OEM_LOCK_SERVICE)).isOemUnlockAllowed();
+    }
+
+    @VisibleForTesting
+    boolean isDeviceStillBeingProvisioned() {
+        return !WizardManagerHelper.isDeviceProvisioned(getActivity());
+    }
 
     private void doMasterClear() {
         Intent intent = new Intent(Intent.ACTION_FACTORY_RESET);

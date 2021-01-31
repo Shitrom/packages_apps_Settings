@@ -17,6 +17,7 @@
 package com.android.settings.password;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 
 import static org.robolectric.RuntimeEnvironment.application;
 
@@ -24,6 +25,8 @@ import android.content.Intent;
 import android.os.UserHandle;
 import android.view.View;
 
+import com.android.internal.widget.LockPatternUtils;
+import com.android.internal.widget.LockscreenCredential;
 import com.android.settings.R;
 import com.android.settings.password.ChooseLockPattern.ChooseLockPatternFragment;
 import com.android.settings.password.ChooseLockPattern.IntentBuilder;
@@ -44,7 +47,7 @@ public class ChooseLockPatternTest {
 
     @Test
     public void activityCreationTest() {
-        // Basic sanity test for activity created without crashing
+        // Basic test for activity created without crashing
         Robolectric.buildActivity(ChooseLockPattern.class, new IntentBuilder(application).build())
                 .setup().get();
     }
@@ -52,20 +55,17 @@ public class ChooseLockPatternTest {
     @Test
     public void intentBuilder_setPattern_shouldAddExtras() {
         Intent intent = new IntentBuilder(application)
-                .setPattern("pattern".getBytes())
+                .setPattern(createPattern("1234"))
                 .setUserId(123)
                 .build();
 
-        assertThat(intent
+        assertWithMessage("EXTRA_KEY_HAS_CHALLENGE").that(intent
                 .getBooleanExtra(ChooseLockSettingsHelper.EXTRA_KEY_HAS_CHALLENGE, true))
-                .named("EXTRA_KEY_HAS_CHALLENGE")
                 .isFalse();
-        assertThat(intent
-                .getByteArrayExtra(ChooseLockSettingsHelper.EXTRA_KEY_PASSWORD))
-                .named("EXTRA_KEY_PASSWORD")
-                .isEqualTo("pattern".getBytes());
-        assertThat(intent.getIntExtra(Intent.EXTRA_USER_ID, 0))
-                .named("EXTRA_USER_ID")
+        assertWithMessage("EXTRA_KEY_PASSWORD").that((LockscreenCredential) intent
+                .getParcelableExtra(ChooseLockSettingsHelper.EXTRA_KEY_PASSWORD))
+                .isEqualTo(createPattern("1234"));
+        assertWithMessage("EXTRA_USER_ID").that(intent.getIntExtra(Intent.EXTRA_USER_ID, 0))
                 .isEqualTo(123);
     }
 
@@ -76,18 +76,30 @@ public class ChooseLockPatternTest {
                 .setUserId(123)
                 .build();
 
-        assertThat(intent
+        assertWithMessage("EXTRA_KEY_HAS_CHALLENGE").that(intent
                 .getBooleanExtra(ChooseLockSettingsHelper.EXTRA_KEY_HAS_CHALLENGE, false))
-                .named("EXTRA_KEY_HAS_CHALLENGE")
                 .isTrue();
-        assertThat(intent
+        assertWithMessage("EXTRA_KEY_CHALLENGE").that(intent
                 .getLongExtra(ChooseLockSettingsHelper.EXTRA_KEY_CHALLENGE, 0L))
-                .named("EXTRA_KEY_CHALLENGE")
                 .isEqualTo(12345L);
-        assertThat(intent
+        assertWithMessage("EXTRA_USER_ID").that(intent
                 .getIntExtra(Intent.EXTRA_USER_ID, 0))
-                .named("EXTRA_USER_ID")
                 .isEqualTo(123);
+    }
+
+    @Test
+    public void intentBuilder_setProfileToUnify_shouldAddExtras() {
+        Intent intent = new IntentBuilder(application)
+                .setProfileToUnify(23, LockscreenCredential.createNone())
+                .build();
+
+        assertWithMessage("EXTRA_KEY_UNIFICATION_PROFILE_ID").that(intent
+                .getIntExtra(ChooseLockSettingsHelper.EXTRA_KEY_UNIFICATION_PROFILE_ID, 0))
+                .isEqualTo(23);
+        assertWithMessage("EXTRA_KEY_UNIFICATION_PROFILE_CREDENTIAL").that(
+                (LockscreenCredential) intent.getParcelableExtra(
+                        ChooseLockSettingsHelper.EXTRA_KEY_UNIFICATION_PROFILE_CREDENTIAL))
+                .isNotNull();
     }
 
     @Config(qualifiers = "sw400dp")
@@ -119,5 +131,10 @@ public class ChooseLockPatternTest {
                         .setForFingerprint(addFingerprintExtra)
                         .build())
                 .setup().get();
+    }
+
+    private LockscreenCredential createPattern(String patternString) {
+        return LockscreenCredential.createPattern(LockPatternUtils.byteArrayToPattern(
+                patternString.getBytes()));
     }
 }

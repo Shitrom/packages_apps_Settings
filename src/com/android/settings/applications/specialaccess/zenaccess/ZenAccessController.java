@@ -40,22 +40,13 @@ public class ZenAccessController extends BasePreferenceController {
 
     private static final String TAG = "ZenAccessController";
 
-    private final ActivityManager mActivityManager;
-
     public ZenAccessController(Context context, String preferenceKey) {
         super(context, preferenceKey);
-        mActivityManager = (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
     }
 
     @Override
     public int getAvailabilityStatus() {
-        return isSupported(mActivityManager)
-                ? AVAILABLE_UNSEARCHABLE
-                : UNSUPPORTED_ON_DEVICE;
-    }
-
-    public static boolean isSupported(ActivityManager activityManager) {
-        return !activityManager.isLowRamDevice();
+        return AVAILABLE;
     }
 
     public static Set<String> getPackagesRequestingNotificationPolicyAccess() {
@@ -70,7 +61,9 @@ public class ZenAccessController extends BasePreferenceController {
             final List<PackageInfo> pkgs = list.getList();
             if (pkgs != null) {
                 for (PackageInfo info : pkgs) {
-                    requestingPackages.add(info.packageName);
+                    if (info.applicationInfo.enabled) {
+                        requestingPackages.add(info.packageName);
+                    }
                 }
             }
         } catch (RemoteException e) {

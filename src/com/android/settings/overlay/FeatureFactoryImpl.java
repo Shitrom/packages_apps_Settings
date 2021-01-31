@@ -30,6 +30,8 @@ import com.android.settings.applications.ApplicationFeatureProvider;
 import com.android.settings.applications.ApplicationFeatureProviderImpl;
 import com.android.settings.aware.AwareFeatureProvider;
 import com.android.settings.aware.AwareFeatureProviderImpl;
+import com.android.settings.biometrics.face.FaceFeatureProvider;
+import com.android.settings.biometrics.face.FaceFeatureProviderImpl;
 import com.android.settings.bluetooth.BluetoothFeatureProvider;
 import com.android.settings.bluetooth.BluetoothFeatureProviderImpl;
 import com.android.settings.connecteddevice.dock.DockUpdaterFeatureProviderImpl;
@@ -40,6 +42,8 @@ import com.android.settings.dashboard.suggestions.SuggestionFeatureProvider;
 import com.android.settings.dashboard.suggestions.SuggestionFeatureProviderImpl;
 import com.android.settings.enterprise.EnterprisePrivacyFeatureProvider;
 import com.android.settings.enterprise.EnterprisePrivacyFeatureProviderImpl;
+import com.android.settings.fuelgauge.BatteryStatusFeatureProvider;
+import com.android.settings.fuelgauge.BatteryStatusFeatureProviderImpl;
 import com.android.settings.fuelgauge.PowerUsageFeatureProvider;
 import com.android.settings.fuelgauge.PowerUsageFeatureProviderImpl;
 import com.android.settings.gestures.AssistGestureFeatureProvider;
@@ -76,6 +80,7 @@ public class FeatureFactoryImpl extends FeatureFactory {
     private SecurityFeatureProvider mSecurityFeatureProvider;
     private SuggestionFeatureProvider mSuggestionFeatureProvider;
     private PowerUsageFeatureProvider mPowerUsageFeatureProvider;
+    private BatteryStatusFeatureProvider mBatteryStatusFeatureProvider;
     private AssistGestureFeatureProvider mAssistGestureFeatureProvider;
     private UserFeatureProvider mUserFeatureProvider;
     private SlicesFeatureProvider mSlicesFeatureProvider;
@@ -84,6 +89,7 @@ public class FeatureFactoryImpl extends FeatureFactory {
     private ContextualCardFeatureProvider mContextualCardFeatureProvider;
     private BluetoothFeatureProvider mBluetoothFeatureProvider;
     private AwareFeatureProvider mAwareFeatureProvider;
+    private FaceFeatureProvider mFaceFeatureProvider;
 
     @Override
     public SupportFeatureProvider getSupportFeatureProvider(Context context) {
@@ -105,6 +111,15 @@ public class FeatureFactoryImpl extends FeatureFactory {
                     context.getApplicationContext());
         }
         return mPowerUsageFeatureProvider;
+    }
+
+    @Override
+    public BatteryStatusFeatureProvider getBatteryStatusFeatureProvider(Context context) {
+        if (mBatteryStatusFeatureProvider == null) {
+            mBatteryStatusFeatureProvider = new BatteryStatusFeatureProviderImpl(
+                    context.getApplicationContext());
+        }
+        return mBatteryStatusFeatureProvider;
     }
 
     @Override
@@ -254,5 +269,13 @@ public class FeatureFactoryImpl extends FeatureFactory {
             mAwareFeatureProvider = new AwareFeatureProviderImpl();
         }
         return mAwareFeatureProvider;
+    }
+
+    @Override
+    public FaceFeatureProvider getFaceFeatureProvider() {
+        if (mFaceFeatureProvider == null) {
+            mFaceFeatureProvider = new FaceFeatureProviderImpl();
+        }
+        return mFaceFeatureProvider;
     }
 }

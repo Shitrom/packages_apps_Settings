@@ -16,6 +16,9 @@
 
 package com.android.settings.wifi.slice;
 
+import static com.android.settings.wifi.slice.ContextualWifiSlice.COLLAPSED_ROW_COUNT;
+import static com.android.settings.wifi.slice.WifiSlice.DEFAULT_EXPANDED_ROW_COUNT;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.Mockito.doReturn;
@@ -27,6 +30,7 @@ import android.content.Context;
 import android.net.NetworkCapabilities;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiManager;
+import android.provider.Settings;
 
 import androidx.core.graphics.drawable.IconCompat;
 import androidx.slice.Slice;
@@ -74,76 +78,73 @@ public class ContextualWifiSliceTest {
         SliceProvider.setSpecs(SliceLiveData.SUPPORTED_SPECS);
         mWifiManager.setWifiEnabled(true);
 
+        // Set WifiSlice expandable
+        Settings.Global.putInt(mContext.getContentResolver(),
+                ContextualWifiSlice.CONTEXTUAL_WIFI_EXPANDABLE, 1);
         mWifiSlice = new ContextualWifiSlice(mContext);
-        mWifiSlice.sPreviouslyDisplayed = false;
     }
 
     @Test
-    public void getWifiSlice_hasActiveConnection_shouldReturnNull() {
-        mWifiSlice.sPreviouslyDisplayed = false;
-        connectToWifi(makeValidatedNetworkCapabilities());
-
-        final Slice wifiSlice = mWifiSlice.getSlice();
-
-        assertThat(wifiSlice).isNull();
-    }
-
-    @Test
-    public void getWifiSlice_newSession_hasActiveConnection_shouldReturnNull() {
-        // Session: use a non-active value
-        // previous displayed: yes
-        mWifiSlice.sPreviouslyDisplayed = true;
+    public void getWifiSlice_newSession_hasActiveConnection_shouldCollapseSlice() {
         mWifiSlice.sActiveUiSession = ~mFeatureFactory.slicesFeatureProvider.getUiSessionToken();
         connectToWifi(makeValidatedNetworkCapabilities());
 
         final Slice wifiSlice = mWifiSlice.getSlice();
 
-        assertThat(wifiSlice).isNull();
+        assertWifiHeader(wifiSlice);
+        assertThat(ContextualWifiSlice.getApRowCount()).isEqualTo(COLLAPSED_ROW_COUNT);
     }
 
     @Test
-    public void getWifiSlice_previousDisplayed_hasActiveConnection_shouldHaveTitleAndToggle() {
+    public void getWifiSlice_newSession_noConnection_shouldExpandSlice() {
+        mWifiSlice.sActiveUiSession = ~mFeatureFactory.slicesFeatureProvider.getUiSessionToken();
+
+        final Slice wifiSlice = mWifiSlice.getSlice();
+
+        assertWifiHeader(wifiSlice);
+        assertThat(ContextualWifiSlice.getApRowCount()).isEqualTo(DEFAULT_EXPANDED_ROW_COUNT);
+    }
+
+    @Test
+    public void getWifiSlice_previousExpanded_hasActiveConnection_shouldExpandSlice() {
         mWifiSlice.sActiveUiSession = mFeatureFactory.slicesFeatureProvider.getUiSessionToken();
-        mWifiSlice.sPreviouslyDisplayed = true;
+        mWifiSlice.sApRowCollapsed = false;
         connectToWifi(makeValidatedNetworkCapabilities());
 
         final Slice wifiSlice = mWifiSlice.getSlice();
 
-        final SliceMetadata metadata = SliceMetadata.from(mContext, wifiSlice);
-        assertThat(metadata.getTitle()).isEqualTo(mContext.getString(R.string.wifi_settings));
-
-        final List<SliceAction> toggles = metadata.getToggles();
-        assertThat(toggles).hasSize(1);
-
-        final SliceAction primaryAction = metadata.getPrimaryAction();
-        final IconCompat expectedToggleIcon = IconCompat.createWithResource(mContext,
-                R.drawable.ic_settings_wireless);
-        assertThat(primaryAction.getIcon().toString()).isEqualTo(expectedToggleIcon.toString());
+        assertWifiHeader(wifiSlice);
+        assertThat(ContextualWifiSlice.getApRowCount()).isEqualTo(DEFAULT_EXPANDED_ROW_COUNT);
     }
 
     @Test
-    public void getWifiSlice_isCaptivePortal_shouldHaveTitleAndToggle() {
-        mWifiSlice.sPreviouslyDisplayed = false;
-        connectToWifi(WifiSliceTest.makeCaptivePortalNetworkCapabilities());
+    public void getWifiSlice_previousCollapsed_connectionLoss_shouldCollapseSlice() {
+        mWifiSlice.sActiveUiSession = mFeatureFactory.slicesFeatureProvider.getUiSessionToken();
+        mWifiSlice.sApRowCollapsed = true;
+        connectToWifi(makeValidatedNetworkCapabilities());
+
+        mWifiManager.disconnect();
+        final Slice wifiSlice = mWifiSlice.getSlice();
+
+        assertWifiHeader(wifiSlice);
+        assertThat(ContextualWifiSlice.getApRowCount()).isEqualTo(COLLAPSED_ROW_COUNT);
+    }
+
+    @Test
+    public void getWifiSlice_notExpandable_shouldCollapseSlice() {
+        Settings.Global.putInt(mContext.getContentResolver(),
+                ContextualWifiSlice.CONTEXTUAL_WIFI_EXPANDABLE, 0);
+        mWifiSlice.sApRowCollapsed = false;
 
         final Slice wifiSlice = mWifiSlice.getSlice();
 
-        final SliceMetadata metadata = SliceMetadata.from(mContext, wifiSlice);
-        assertThat(metadata.getTitle()).isEqualTo(mContext.getString(R.string.wifi_settings));
-
-        final List<SliceAction> toggles = metadata.getToggles();
-        assertThat(toggles).hasSize(1);
-
-        final SliceAction primaryAction = metadata.getPrimaryAction();
-        final IconCompat expectedToggleIcon = IconCompat.createWithResource(mContext,
-                R.drawable.ic_settings_wireless);
-        assertThat(primaryAction.getIcon().toString()).isEqualTo(expectedToggleIcon.toString());
+        assertWifiHeader(wifiSlice);
+        assertThat(ContextualWifiSlice.getApRowCount()).isEqualTo(COLLAPSED_ROW_COUNT);
     }
 
     @Test
     public void getWifiSlice_contextualWifiSlice_shouldReturnContextualWifiSliceUri() {
         mWifiSlice.sActiveUiSession = mFeatureFactory.slicesFeatureProvider.getUiSessionToken();
-        mWifiSlice.sPreviouslyDisplayed = true;
 
         final Slice wifiSlice = mWifiSlice.getSlice();
 
@@ -164,5 +165,18 @@ public class ContextualWifiSliceTest {
         nc.addTransportType(NetworkCapabilities.TRANSPORT_WIFI);
         nc.addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
         return nc;
+    }
+
+    private void assertWifiHeader(Slice slice) {
+        final SliceMetadata metadata = SliceMetadata.from(mContext, slice);
+        assertThat(metadata.getTitle()).isEqualTo(mContext.getString(R.string.wifi_settings));
+
+        final SliceAction primaryAction = metadata.getPrimaryAction();
+        final IconCompat expectedToggleIcon = IconCompat.createWithResource(mContext,
+                R.drawable.ic_settings_wireless);
+        assertThat(primaryAction.getIcon().toString()).isEqualTo(expectedToggleIcon.toString());
+
+        final List<SliceAction> toggles = metadata.getToggles();
+        assertThat(toggles).hasSize(1);
     }
 }
